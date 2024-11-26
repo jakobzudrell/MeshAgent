@@ -1036,17 +1036,17 @@ void kvm_check_permission()
     //Request screen recording access
     if(__builtin_available(macOS 10.15, *)){
         if(!CGPreflightScreenCaptureAccess()) {
-			KvmDebugLog("Requesting screen capture access!");
+			KvmDebugLog("Requesting screen capture access!\n");
             CGRequestScreenCaptureAccess();
         } else {
-			KvmDebugLog("NOT requesting screen capture access!");
+			KvmDebugLog("NOT requesting screen capture access!\n");
 		}
     }
 
     // Request accessibility access
     if(__builtin_available(macOS 10.9, *)){
 
-		KvmDebugLog("Requesting screen control (accessibility) access!");
+		KvmDebugLog("Requesting screen control (accessibility) access!\n");
 
         const void * keys[] = { kAXTrustedCheckOptionPrompt };
         const void * values[] = { kCFBooleanTrue };
