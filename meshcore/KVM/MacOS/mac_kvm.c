@@ -355,7 +355,7 @@ int kvm_server_inputdata(char* block, int blocklen)
 				
 				if (size == 12) w = ((short)ntohs(((short*)(block))[5]));
 				
-				//printf("x:%d, y:%d, b:%d, w:%d\n", x, y, block[5], w);
+				// KvmDebugLog("x:%d, y:%d, b:%d, w:%d\n", x, y, block[5], w);
 				MouseAction(x, y, (int)(unsigned char)(block[5]), w);
 			}
 			break;
@@ -478,7 +478,7 @@ void* kvm_mainloopinput(void* param)
 			write(STDOUT_FILENO, tmp, tmpLen);
 			fsync(STDOUT_FILENO);
 		}
-		while ((ptr2 = kvm_server_inputdata((char*)pchRequest2 + ptr, cbBytesRead - ptr)) != 0) { ptr += ptr2; }
+		while ((ptr2 = kvm_server_inputdata((char*)pchRequest2 + ptr, cbBytesRead - ptr)) != 0 && !g_shutdown) { ptr += ptr2; }
 
 		if (KVM_AGENT_FD != -1)
 		{
@@ -490,6 +490,8 @@ void* kvm_mainloopinput(void* param)
 		if (ptr == len) { len = 0; ptr = 0; }
 		// TODO: else move the reminder.
 	}
+
+	KvmDebugLog("input loop has exited\n");
 
 	return 0;
 }
@@ -725,10 +727,12 @@ void* kvm_server_mainloop(void* param)
 
 
 		senddebug(screen_num);
+		KvmDebugLog("Capturing screen...\n");
 		CGImageRef image = CGDisplayCreateImage(screen_num);
 		senddebug(99);
 		if (image == NULL) 
 		{
+			KvmDebugLog("Failed to capture screen...\n");
 			g_shutdown = 1;
 			senddebug(0);
 		}
@@ -768,7 +772,7 @@ void* kvm_server_mainloop(void* param)
 
 						written = KVM_SEND(buf, tilesize);
 
-						// KvmDebugLog("Wrote %d bytes to master in kvm_server_mainloop\n", written);
+						KvmDebugLog("Wrote %d bytes to master in kvm_server_mainloop\n", written);
 						if (written == -1) 
 						{ 
 							/*ILIBMESSAGE("KVMBREAK-K2\r\n");*/ 
@@ -795,7 +799,6 @@ void* kvm_server_mainloop(void* param)
 			{
 				KvmDebugLog("...exit for loop\n");
 
-
 				char tmp[255];
 				int tmpLen = sprintf_s(tmp, sizeof(tmp), "...exit for loop\n");
 				written = write(STDOUT_FILENO, tmp, tmpLen);
@@ -806,9 +809,12 @@ void* kvm_server_mainloop(void* param)
 		CGImageRelease(image);
 	}
 
+	KvmDebugLog("Screen capture loop has exited...\n");
 	
 	pthread_join(kvmthread, NULL);
 	kvmthread = (pthread_t)NULL;
+
+	KvmDebugLog("Inputthread has finished...\n");
 
 	if (g_tileInfo != NULL) { for (r = 0; r < TILE_HEIGHT_COUNT; r++) { free(g_tileInfo[r]); } }
 	g_tileInfo = NULL;
@@ -820,7 +826,6 @@ void* kvm_server_mainloop(void* param)
 	if (KVM_AGENT_FD != -1)
 	{
 		KvmDebugLog("Exiting...\n");
-
 
 		written = write(STDOUT_FILENO, "Exiting...\n", 11);
 		fsync(STDOUT_FILENO);
