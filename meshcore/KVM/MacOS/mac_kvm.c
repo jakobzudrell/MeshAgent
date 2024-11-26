@@ -27,17 +27,19 @@ limitations under the License.
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreServices/CoreServices.h>
+// #include <ScreenCaptureKit/ScreenCaptureKit.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #include <string.h>
 #include <pwd.h>
+#include <unistd.h>
 
 int KVM_Listener_FD = -1;
 #define KVM_Listener_Path "/usr/local/mesh_services/meshagent/kvm"
 #if defined(_TLSLOG)
-#define TLSLOG1 printf
+#define TLSLOG1(x) printf(x);
 #else
 #define TLSLOG1(...) ;
 #endif
@@ -92,17 +94,17 @@ pthread_t kvmthread = (pthread_t)NULL;
 ILibProcessPipe_Process gChildProcess;
 ILibQueue g_messageQ;
 
-//int logenabled = 1;
-//FILE *logfile = NULL;
-//#define MASTERLOGFILE "/dev/null"
-//#define SLAVELOGFILE "/dev/null"
-//#define LOGFILE "/dev/null"
+int logenabled = 1;
+FILE *logfile = NULL;
+// #define MASTERLOGFILE "/tmp/mshlog-master"
+// #define SLAVELOGFILE "/tmp/mshlog-slave"
+// #define LOGFILE "/tmp/mshlog"
 
 
-#define KvmDebugLog(...)
-//#define KvmDebugLog(...) printf(__VA_ARGS__); if (logfile != NULL) fprintf(logfile, __VA_ARGS__);
-//#define KvmDebugLog(x) if (logenabled) printf(x);
-//#define KvmDebugLog(x) if (logenabled) fprintf(logfile, "Writing from slave in kvm_send_resolution\n");
+// #define KvmDebugLog(...)
+#define KvmDebugLog(...) printf(__VA_ARGS__); if (logfile != NULL) fprintf(logfile, __VA_ARGS__); fflush(logfile);
+// #define KvmDebugLog(x) if (logenabled) printf(x);
+// #define KvmDebugLog(x) if (logenabled) fprintf(logfile, "Writing from slave in kvm_send_resolution\n");
 
 void senddebug(int val)
 {
@@ -271,6 +273,8 @@ int get_kbd_state()
 
 int kvm_init()
 {
+	KvmDebugLog("===> kvm_init\n");
+
 	ILibCriticalLogFilename = "KVMSlave.log";
 	int old_height_count = TILE_HEIGHT_COUNT;
 	
@@ -441,9 +445,9 @@ void* kvm_mainloopinput(void* param)
 			fsync(STDOUT_FILENO);
 		}
 
-		KvmDebugLog("Reading from master in kvm_mainloopinput\n");
+		// KvmDebugLog("Reading from master in kvm_mainloopinput\n");
 		cbBytesRead = read(KVM_AGENT_FD == -1 ? STDIN_FILENO: KVM_AGENT_FD, pchRequest2 + len, 30000 - len);
-		KvmDebugLog("Read %d bytes from master in kvm_mainloopinput\n", cbBytesRead);
+		// KvmDebugLog("Read %d bytes from master in kvm_mainloopinput\n", cbBytesRead);
 
 		if (KVM_AGENT_FD != -1)
 		{
@@ -489,6 +493,8 @@ void* kvm_mainloopinput(void* param)
 
 	return 0;
 }
+
+
 void ExitSink(int s)
 {
 	UNREFERENCED_PARAMETER(s);
@@ -497,14 +503,32 @@ void ExitSink(int s)
 	
 	if (KVM_Listener_FD > 0) 
 	{
+		KvmDebugLog("EXITING\n");
+
 		write(STDOUT_FILENO, "EXITING\n", 8);
 		fsync(STDOUT_FILENO);
 		close(KVM_Listener_FD); 
 	}
 	g_shutdown = 1;
 }
+
+
 void* kvm_server_mainloop(void* param)
 {
+
+	logfile = fopen("/tmp/mshlog.txt", "w");
+
+	if(logfile == NULL) {
+		perror("Unable to open logfile");
+	}
+
+	KvmDebugLog("This fd is %d\n", fileno(logfile));
+
+	write(fileno(logfile), "Hello World\n", sizeof("Hello World\n"));
+
+	kvm_check_permission();
+
+
 	int x, y, height, width, r, c = 0;
 	long long desktopsize = 0;
 	long long tilesize = 0;
@@ -514,16 +538,24 @@ void* kvm_server_mainloop(void* param)
 	int written = 0;
 	struct sockaddr_un serveraddr;
 
+
+	KvmDebugLog("===> kvm_server_mainloop\n");
+
+	int pid = getpid();
+	KvmDebugLog("==> process id is: %d\n", pid);
+
+
 	if (param == NULL)
 	{
+		KvmDebugLog("Doing I/O via stdin/stdout\n");
 		// This is doing I/O via StdIn/StdOut
-
 		int flags;
 		flags = fcntl(STDOUT_FILENO, F_GETFL, 0);
 		if (fcntl(STDOUT_FILENO, F_SETFL, (O_NONBLOCK | flags) ^ O_NONBLOCK) == -1) {}
 	}
 	else
 	{
+		KvmDebugLog("Doing I/O via unix socket\n");
 		// this is doing I/O via a Unix Domain Socket
 		if ((KVM_Listener_FD = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
 		{
@@ -612,6 +644,9 @@ void* kvm_server_mainloop(void* param)
 
 			SCREEN_HEIGHT = SCREEN_WIDTH = 0;
 
+			KvmDebugLog("Waiting for NEXT DomainSocket, TILE_HEIGHT_COUNT=%d, TILE_WIDTH_COUNT=%d\n", TILE_HEIGHT_COUNT, TILE_WIDTH_COUNT);
+
+
 			char stmp[255];
 			int stmpLen = sprintf_s(stmp, sizeof(stmp), "Waiting for NEXT DomainSocket, TILE_HEIGHT_COUNT=%d, TILE_WIDTH_COUNT=%d\n", TILE_HEIGHT_COUNT, TILE_WIDTH_COUNT);
 			written = write(STDOUT_FILENO, stmp, stmpLen);
@@ -619,6 +654,8 @@ void* kvm_server_mainloop(void* param)
 
 			if ((KVM_AGENT_FD = accept(KVM_Listener_FD, NULL, NULL)) < 0)
 			{
+				KvmDebugLog("ACCEPT ERROR ON DOMAIN SOCKET");
+
 				g_shutdown = 1;
 				written = write(STDOUT_FILENO, "ACCEPT ERROR ON DOMAIN SOCKET", 29);
 				fsync(STDOUT_FILENO);
@@ -626,6 +663,8 @@ void* kvm_server_mainloop(void* param)
 			}
 			else
 			{
+				KvmDebugLog("ACCEPTed new connection %d on Domain Socket\n", KVM_AGENT_FD);
+
 				char tmp[255];
 				int tmpLen = sprintf_s(tmp, sizeof(tmp), "ACCEPTed new connection %d on Domain Socket\n", KVM_AGENT_FD);
 				written = write(STDOUT_FILENO, tmp, tmpLen);
@@ -660,6 +699,8 @@ void* kvm_server_mainloop(void* param)
 
 		screen_num = CGMainDisplayID();
 
+		// KvmDebugLog("===> GCMainDisplayID = %d\n", screen_num);
+
 		if (screen_num == 0) { g_shutdown = 1; senddebug(-2); break; }
 		
 		if (SCREEN_SCALE_SET == 0)
@@ -682,9 +723,10 @@ void* kvm_server_mainloop(void* param)
 			continue;
 		}
 
-		//senddebug(screen_num);
+
+		senddebug(screen_num);
 		CGImageRef image = CGDisplayCreateImage(screen_num);
-		//senddebug(99);
+		senddebug(99);
 		if (image == NULL) 
 		{
 			g_shutdown = 1;
@@ -696,6 +738,8 @@ void* kvm_server_mainloop(void* param)
 
 			if (KVM_AGENT_FD != -1)
 			{
+				KvmDebugLog("...Enter for loop\n");
+
 				char tmp[255];
 				int tmpLen = sprintf_s(tmp, sizeof(tmp), "...Enter for loop\n");
 				written = write(STDOUT_FILENO, tmp, tmpLen);
@@ -720,11 +764,11 @@ void* kvm_server_mainloop(void* param)
 					if (buf && !g_shutdown)
 					{	
 						// Write the reply to the pipe.
-						//KvmDebugLog("Writing to master in kvm_server_mainloop\n");
+						// KvmDebugLog("Writing to master in kvm_server_mainloop\n");
 
 						written = KVM_SEND(buf, tilesize);
 
-						//KvmDebugLog("Wrote %d bytes to master in kvm_server_mainloop\n", written);
+						// KvmDebugLog("Wrote %d bytes to master in kvm_server_mainloop\n", written);
 						if (written == -1) 
 						{ 
 							/*ILIBMESSAGE("KVMBREAK-K2\r\n");*/ 
@@ -749,6 +793,9 @@ void* kvm_server_mainloop(void* param)
 
 			if (KVM_AGENT_FD != -1)
 			{
+				KvmDebugLog("...exit for loop\n");
+
+
 				char tmp[255];
 				int tmpLen = sprintf_s(tmp, sizeof(tmp), "...exit for loop\n");
 				written = write(STDOUT_FILENO, tmp, tmpLen);
@@ -758,6 +805,7 @@ void* kvm_server_mainloop(void* param)
 		}
 		CGImageRelease(image);
 	}
+
 	
 	pthread_join(kvmthread, NULL);
 	kvmthread = (pthread_t)NULL;
@@ -771,10 +819,18 @@ void* kvm_server_mainloop(void* param)
 
 	if (KVM_AGENT_FD != -1)
 	{
+		KvmDebugLog("Exiting...\n");
+
+
 		written = write(STDOUT_FILENO, "Exiting...\n", 11);
 		fsync(STDOUT_FILENO);
 	}
 	ILibQueue_Destroy(g_messageQ);
+
+	if(logfile != NULL) {
+		fclose(logfile);
+	}
+
 	return (void*)0;
 }
 
@@ -788,6 +844,7 @@ void kvm_relay_ExitHandler(ILibProcessPipe_Process sender, int exitCode, void* u
 	UNREFERENCED_PARAMETER(exitCode);
 	UNREFERENCED_PARAMETER(user);
 }
+
 void kvm_relay_StdOutHandler(ILibProcessPipe_Process sender, char *buffer, size_t bufferLen, size_t* bytesConsumed, void* user)
 {
 	unsigned short size = 0;
@@ -828,15 +885,15 @@ void kvm_relay_StdOutHandler(ILibProcessPipe_Process sender, char *buffer, size_
 }
 void kvm_relay_StdErrHandler(ILibProcessPipe_Process sender, char *buffer, size_t bufferLen, size_t* bytesConsumed, void* user)
 {
-	//KVMDebugLog *log = (KVMDebugLog*)buffer;
+	// KVMDebugLog *log = (KVMDebugLog*)buffer;
 
-	//UNREFERENCED_PARAMETER(sender);
-	//UNREFERENCED_PARAMETER(user);
+	// //UNREFERENCED_PARAMETER(sender);
+	// //UNREFERENCED_PARAMETER(user);
 
-	//if (bufferLen < sizeof(KVMDebugLog) || bufferLen < log->length) { *bytesConsumed = 0;  return; }
-	//*bytesConsumed = log->length;
-	////ILibRemoteLogging_printf(ILibChainGetLogger(gILibChain), (ILibRemoteLogging_Modules)log->logType, (ILibRemoteLogging_Flags)log->logFlags, "%s", log->logData);
-	//ILibRemoteLogging_printf(ILibChainGetLogger(gILibChain), ILibRemoteLogging_Modules_Microstack_Generic, (ILibRemoteLogging_Flags)log->logFlags, "%s", log->logData);
+	// if (bufferLen < sizeof(KVMDebugLog) || bufferLen < log->length) { *bytesConsumed = 0;  return; }
+	// *bytesConsumed = log->length;
+	// //ILibRemoteLogging_printf(ILibChainGetLogger(gILibChain), (ILibRemoteLogging_Modules)log->logType, (ILibRemoteLogging_Flags)log->logFlags, "%s", log->logData);
+	// ILibRemoteLogging_printf(ILibChainGetLogger(gILibChain), ILibRemoteLogging_Modules_Microstack_Generic, (ILibRemoteLogging_Flags)log->logFlags, "%s", log->logData);
 	*bytesConsumed = bufferLen;
 }
 
@@ -853,11 +910,13 @@ void* kvm_relay_setup(char *exePath, void *processPipeMgr, ILibKVM_WriteHandler 
 
 	if (uid != 0)
 	{
+		printf("Spawning child process -> %s\n", exePath);
 		// Spawn child kvm process into a specific user session
 		gChildProcess = ILibProcessPipe_Manager_SpawnProcessEx3(processPipeMgr, exePath, parms0, ILibProcessPipe_SpawnTypes_DEFAULT, (void*)(uint64_t)uid, 0);
 		g_slavekvm = ILibProcessPipe_Process_GetPID(gChildProcess);
 		
 		char tmp[255];
+		printf("Child KVM (pid: %d)\n", g_slavekvm);
 		sprintf_s(tmp, sizeof(tmp), "Child KVM (pid: %d)", g_slavekvm);
 		ILibProcessPipe_Process_ResetMetadata(gChildProcess, tmp);
 		
@@ -869,6 +928,7 @@ void* kvm_relay_setup(char *exePath, void *processPipeMgr, ILibKVM_WriteHandler 
 	}
 	else
 	{
+		printf("No users are logged in");
 		// No users are logged in. This is a special case for MacOS
 		//int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 		//if (!fd < 0)
@@ -898,7 +958,7 @@ void kvm_relay_reset()
 // Clean up the KVM session.
 void kvm_cleanup()
 {
-	KvmDebugLog("kvm_cleanup\n");
+	printf("kvm_cleanup\n");
 	g_shutdown = 1;
 	if (gChildProcess != NULL)
 	{
@@ -914,22 +974,25 @@ typedef enum {
     MPAuthorizationStatusDenied
 } MPAuthorizationStatus;
 
-
-
-
 MPAuthorizationStatus _checkFDAUsingFile(const char *path) {
+
+	KvmDebugLog("checking permission on: %s\n", path);
+
     int fd = open(path, O_RDONLY);
     if (fd != -1)
     {
         close(fd);
+		KvmDebugLog("success\n");
         return MPAuthorizationStatusAuthorized;
     }
 
     if (errno == EPERM || errno == EACCES)
     {
+		KvmDebugLog("failed: EPERM, EACCESS\n");
         return MPAuthorizationStatusDenied;
     }
 
+	KvmDebugLog("unknown\n");
     return MPAuthorizationStatusNotDetermined;
 }
 
@@ -968,6 +1031,7 @@ MPAuthorizationStatus _fullDiskAuthorizationStatus() {
 
 void kvm_check_permission()
 {
+	KvmDebugLog("Checking KVM permissions...\n");
 
     //Request screen recording access
     if(__builtin_available(macOS 10.15, *)){
@@ -975,7 +1039,6 @@ void kvm_check_permission()
             CGRequestScreenCaptureAccess();
         }
     }
-
 
     // Request accessibility access
     if(__builtin_available(macOS 10.9, *)){

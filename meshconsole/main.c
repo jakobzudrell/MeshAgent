@@ -90,6 +90,8 @@ int main(int argc, char **argv)
 	realpath(argv[0], __agentExecPath);
 #endif
 
+	printf("=====> MeshAgent says hello!");
+
 	// Check if .JS file is integrated with executable
 	char *integratedJavaScript = NULL;
 	int integratedJavaScriptLen = 0;

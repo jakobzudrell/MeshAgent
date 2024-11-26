@@ -823,6 +823,8 @@ duk_ret_t ILibDuktape_MeshAgent_SendCommand(duk_context *ctx)
 
 void ILibDuktape_MeshAgent_Ready(ILibDuktape_EventEmitter *sender, char *eventName, void *hookedCallback)
 {
+	printf("===> ILibDuktape_MeshAgent_Ready");
+
 	MeshAgentHostContainer *agent;
 	duk_push_heapptr(sender->ctx, sender->object);						// [agent]
 	duk_get_prop_string(sender->ctx, -1, MESH_AGENT_PTR);				// [MeshAgent][ptr]
@@ -3047,7 +3049,7 @@ void MeshServer_ProcessCommand(ILibWebClient_StateObject WebStateObject, MeshAge
 	if (cmd[0] == '{' || command >= 1000)
 	{
 		int popCount = 0;
-		// if (cmd[0] == '{') { cmd[cmdLen] = 0; printf("%s\r\n", cmd); } // DEBUG: Print JSON command
+		if (cmd[0] == '{') { cmd[cmdLen] = 0; printf("%s\r\n", cmd); } // DEBUG: Print JSON command
 
 		ILibDuktape_MeshAgent_PUSH(agent->meshCoreCtx, agent->chain);			// [agent]
 		duk_get_prop_string(agent->meshCoreCtx, -1, "emit");					// [agent][emit]
@@ -4498,6 +4500,9 @@ void agentDumpKeysSink(ILibSimpleDataStore sender, char* Key, int KeyLen, void *
 MeshAgentHostContainer* MeshAgent_Create(MeshCommand_AuthInfo_CapabilitiesMask capabilities)
 {
 
+	printf("\n\n====> MeshAgent_Create <======\n");
+
+
 #if defined(_LINKVM) && defined(__APPLE__)
     //Before anything, check for permissions (macos requirement)
     kvm_check_permission();
@@ -4579,6 +4584,7 @@ MeshAgentHostContainer* MeshAgent_Create(MeshCommand_AuthInfo_CapabilitiesMask c
 
 void MeshAgent_Slave(MeshAgentHostContainer *agentHost)
 {
+	printf("\n\n====> MeshAgent_Slave <======\n");
 	// We are just a slave container
 	agentHost->exitCode = ILibDuktape_ScriptContainer_StartSlave(agentHost->chain, agentHost->pipeManager);
 	agentHost->chain = NULL;
