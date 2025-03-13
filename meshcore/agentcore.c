@@ -1082,6 +1082,7 @@ duk_ret_t ILibDuktape_MeshAgent_getRemoteDesktop_DomainIPC_EndSink(duk_context *
 		int console_uid = duk_get_int(ctx, -1);
 		char tmp[255];
 		sprintf_s(tmp, sizeof(tmp), "User id: %d has logged in", console_uid);
+		printf("user login: %d", console_uid);
 		MeshAgent_sendConsoleText(ctx, tmp);
 
 		duk_push_heapptr(ctx, ptrs->MeshAgentObject);
@@ -6098,6 +6099,7 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 	if (paramLen == 2 && strcmp(param[1], "--netinfo") == 0) { char* data; int len = MeshInfo_GetSystemInformation(&data); if (len > 0) { printf("%s\r\n", data); free(data); } return 0; }
 #endif
 
+
 	if (agentHost->exePath == NULL)
 	{
 		agentHost->exePath = exePath;
@@ -6126,6 +6128,9 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 		exePath[x] = 0;
 #endif
 	}
+
+	printf("AgentHost ExePath: %s\n", agentHost->exePath);
+
 
 	// Perform a self SHA384 Hash
 	GenerateSHA384FileHash(agentHost->exePath, agentHost->agentHash);

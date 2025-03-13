@@ -27,7 +27,6 @@ limitations under the License.
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreServices/CoreServices.h>
-// #include <ScreenCaptureKit/ScreenCaptureKit.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -915,14 +914,15 @@ void* kvm_relay_setup(char *exePath, void *processPipeMgr, ILibKVM_WriteHandler 
 
 	if (uid != 0)
 	{
-		printf("Spawning child process -> %s\n", exePath);
+		KvmDebugLog("Spawning child process -> %s\n", exePath);
+		KvmDebugLog("User ID -> %d\n", uid);
 		// Spawn child kvm process into a specific user session
 		gChildProcess = ILibProcessPipe_Manager_SpawnProcessEx3(processPipeMgr, exePath, parms0, ILibProcessPipe_SpawnTypes_DEFAULT, (void*)(uint64_t)uid, 0);
 		g_slavekvm = ILibProcessPipe_Process_GetPID(gChildProcess);
 		
 		char tmp[255];
 		printf("Child KVM (pid: %d)\n", g_slavekvm);
-		sprintf_s(tmp, sizeof(tmp), "Child KVM (pid: %d)", g_slavekvm);
+		sprintf_s(tmp, sizeof(tmp), "Child KVM (pid: %d)", g_slavekvm);make clean && make macos ARCHID=29 DEBUG=1 && mv meshagent_osx-arm-64 ~/Documents/vm_shar
 		ILibProcessPipe_Process_ResetMetadata(gChildProcess, tmp);
 		
 		ILibProcessPipe_Process_AddHandlers(gChildProcess, 65535, &kvm_relay_ExitHandler, &kvm_relay_StdOutHandler, &kvm_relay_StdErrHandler, NULL, user);
@@ -933,7 +933,7 @@ void* kvm_relay_setup(char *exePath, void *processPipeMgr, ILibKVM_WriteHandler 
 	}
 	else
 	{
-		printf("No users are logged in");
+		KvmDebugLog("No users are logged in");
 		// No users are logged in. This is a special case for MacOS
 		//int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 		//if (!fd < 0)
@@ -1040,12 +1040,14 @@ void kvm_check_permission()
 
     //Request screen recording access
     if(__builtin_available(macOS 10.15, *)){
-        if(!CGPreflightScreenCaptureAccess()) {
-			KvmDebugLog("Requesting screen capture access!\n");
-            CGRequestScreenCaptureAccess();
-        } else {
-			KvmDebugLog("NOT requesting screen capture access!\n");
-		}
+        // if(!CGPreflightScreenCaptureAccess()) {
+		// 	KvmDebugLog("Requesting screen capture access!\n");
+        //     CGRequestScreenCaptureAccess();
+        // } else {
+		// 	KvmDebugLog("NOT requesting screen capture access!\n");
+		// }
+		KvmDebugLog("Requesting screen capture access!\n");
+		CGRequestScreenCaptureAccess();
     }
 
     // Request accessibility access
